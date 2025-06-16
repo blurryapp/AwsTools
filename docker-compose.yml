@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    environment:
+      - SERVICES=lambda,s3,iam,sts,apigateway # Add other services as needed
+      - DEFAULT_REGION=us-east-1
+      - DEBUG=1 # Enable detailed logs for localstack
+      - DATA_DIR=/tmp/localstack/data # Persist localstack data (optional)
+      - LAMBDA_EXECUTOR=docker # Run lambdas in docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # For Windows, you might need:
+      # - DOCKER_HOST=tcp://host.docker.internal:2375
+    ports:
+      - "4566:4566" # Main LocalStack port for all services
+      - "4571:4571" # For older versions or specific service access (optional)
+    volumes:
+      - "${TMPDIR:-/tmp}/localstack:/tmp/localstack" # For persisting data
+      - "/var/run/docker.sock:/var/run/docker.sock" # Mount docker sock to allow localstack to control docker
+
+  app:
+    build:
+      context: . # Build the image from the Dockerfile in the current directory
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/var/task/src # Mount local src directory to container for live reloading (optional, good for dev)
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      # Point Lambda client to LocalStack
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    # The app service itself won't run a long-lived process in this setup,
+    # it's mainly for building the image and potentially running one-off commands
+    # or tests against localstack.
+    # We will deploy the lambda to localstack's lambda service.
+    depends_on:
+      - localstack
+    # If you wanted to run something like tests automatically:
+    # command: sh -c "pip install pytest && pytest tests/"
+
+networks:
+  default:
+    driver: bridge
